@@ -18,7 +18,7 @@ feedback, questions, or bug reports.
 
 This Fork
 =========
-This fork implements the methodology proposed in Risk-Sensitive Evaluation and Learning to Rank using Multiple Baselines
+This fork implements the methodology proposed in *Risk-Sensitive Evaluation and Learning to Rank using Multiple Baselines - 2016*
 
 Example
 =======
