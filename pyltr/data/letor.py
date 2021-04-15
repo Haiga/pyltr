@@ -62,14 +62,14 @@ def iter_lines(lines, has_targets=True, one_indexed=True, missing=0.0):
             assert fid >= 0
             while len(x) <= fid:
                 orig = len(x)
-                x.resize(len(x) * 2)
+                x.resize(len(x) * 2, refcheck=False)
                 x[orig:orig * 2] = missing
 
             x[fid] = val
             num_features = max(fid + 1, num_features)
 
         assert num_features > 0
-        x.resize(num_features)
+        x.resize(num_features, refcheck=False)
 
         yield (x, y, qid, comment)
 

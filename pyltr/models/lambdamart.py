@@ -28,7 +28,53 @@ from ..util.group import check_qids, get_groups
 from ..util.sort import get_sorted_y_positions
 import six
 from six.moves import range
+import math
 
+from scipy.stats import norm
+
+
+def getGeoRiskDefault(mat, alpha):
+    numSystems = mat.shape[1]
+    numQueries = mat.shape[0]
+    Tj = np.array([0.0] * numQueries)
+    Si = np.array([0.0] * numSystems)
+    geoRisk = np.array([0.0] * numSystems)
+    zRisk = np.array([0.0] * numSystems)
+    mSi = np.array([0.0] * numSystems)
+
+    for i in range(numSystems):
+        Si[i] = np.sum(mat[:, i])
+        mSi[i] = np.mean(mat[:, i])
+
+    for j in range(numQueries):
+        Tj[j] = np.sum(mat[j, :])
+
+    N = np.sum(Tj)
+    i = 0
+    # for i in range(numSystems):
+    tempZRisk = 0
+    for j in range(numQueries):
+        eij = Si[i] * (Tj[j] / N)
+        xij_eij = mat[j, i] - eij
+        if eij != 0:
+            ziq = xij_eij / math.sqrt(eij)
+        else:
+            ziq = 0
+        if xij_eij < 0:
+            ziq = (1 + alpha) * ziq
+        tempZRisk = tempZRisk + ziq
+    zRisk[i] = tempZRisk
+
+    c = numQueries
+    # for i in range(numSystems):
+    # ncd = norm.cdf(zRisk[i] / c)
+    # geoRisk[i] = math.sqrt((Si[i] / c) * ncd)
+    i = 0
+
+    ncd = norm.cdf(zRisk[i] / c)
+    geoRisk[i] = math.sqrt((Si[i] / c) * ncd)
+
+    return geoRisk
 
 class LambdaMART(AdditiveModel):
     """Tree-based learning to rank model.
@@ -122,8 +168,10 @@ class LambdaMART(AdditiveModel):
                  query_subsample=1.0, subsample=1.0, min_samples_split=2,
                  min_samples_leaf=1, max_depth=3, random_state=None,
                  max_features=None, verbose=0, max_leaf_nodes=None,
-                 warm_start=True):
+                 warm_start=True, features_risk=None):
         super(LambdaMART, self).__init__()
+        if features_risk is None:
+            features_risk = ["106", "111"]
         self.metric = metrics.dcg.NDCG() if metric is None else metric
         self.learning_rate = learning_rate
         self.n_estimators = n_estimators
@@ -137,6 +185,7 @@ class LambdaMART(AdditiveModel):
         self.verbose = verbose
         self.max_leaf_nodes = max_leaf_nodes
         self.warm_start = warm_start
+        self.features_risk = features_risk
 
     def fit(self, X, y, qids, monitor=None):
         """Fit lambdamart onto a dataset.
@@ -249,6 +298,7 @@ class LambdaMART(AdditiveModel):
 
         """
         if self.estimators_ is None or len(self.estimators_) == 0:
+            from sklearn.exceptions import NotFittedError
             raise NotFittedError("Estimator not fitted, call `fit` before"
                                  " `feature_importances_`.")
 
@@ -261,7 +311,7 @@ class LambdaMART(AdditiveModel):
         importances = total_sum / len(self.estimators_)
         return importances
 
-    def _calc_lambdas_deltas(self, qid, y, y_pred):
+    def _calc_lambdas_deltas(self, qid, y, y_pred, mat, posix, grisk_normal):
         ns = y.shape[0]
         positions = get_sorted_y_positions(y, y_pred, check=False)
         actual = y[positions]
@@ -270,6 +320,26 @@ class LambdaMART(AdditiveModel):
         max_k = self.metric.max_k()
         if max_k is None or ns < max_k:
             max_k = ns
+
+        # swap_deltas_grisk = np.zeros(swap_deltas.shape)
+        for i in range(max_k):########
+            for j in range(i + 1, ns):#############
+                if actual[i] == actual[j]:
+                    continue
+
+                delta_metric = swap_deltas[i, j]
+                if delta_metric <= 0.0:
+                    continue
+                # try:
+                before_m = mat[posix][0]
+                # except:
+                #     x = 2
+                mat[posix][0] += swap_deltas[i, j]
+                # swap_deltas_grisk[i, j] = getGeoRiskDefault(mat, 5)[0] - grisk_normal
+                swap_deltas[i, j] = getGeoRiskDefault(mat, 5)[0] - grisk_normal
+                mat[posix][0] = before_m
+
+
 
         lambdas = np.zeros(ns)
         deltas = np.zeros(ns)
@@ -287,13 +357,13 @@ class LambdaMART(AdditiveModel):
                 # invariant: y_pred[a] >= y_pred[b]
 
                 if actual[i] < actual[j]:
-                    assert delta_metric > 0.0
+                    # assert delta_metric > 0.0
                     logistic = scipy.special.expit(y_pred[a] - y_pred[b])
                     l = logistic * delta_metric
                     lambdas[a] -= l
                     lambdas[b] += l
                 else:
-                    assert delta_metric < 0.0
+                    # assert delta_metric < 0.0
                     logistic = scipy.special.expit(y_pred[b] - y_pred[a])
                     l = logistic * -delta_metric
                     lambdas[a] += l
@@ -329,11 +399,29 @@ class LambdaMART(AdditiveModel):
 
         all_lambdas = np.zeros(n_samples)
         all_deltas = np.zeros(n_samples)
+
+        mat = []
+        for qidx, (qid, a, b, _) in enumerate(query_groups):
+            score = self.metric.evaluate_preds(
+                qid, y[a:b], y_pred[a:b])
+
+            score_b1 = self.metric.evaluate_preds(
+                qid, y[a:b], X[:, int(self.features_risk[0])][a:b])
+
+            score_b2 = self.metric.evaluate_preds(
+                qid, y[a:b], X[:, int(self.features_risk[1])][a:b])
+
+            mat.append([score, score_b1, score_b2])
+
+        mat = np.array(mat)
+        grisk_normal = getGeoRiskDefault(mat, 5)[0]
+        posix = 0
         for qid, a, b, _ in query_groups:
             lambdas, deltas = self._calc_lambdas_deltas(qid, y[a:b],
-                                                        y_pred[a:b])
+                                                        y_pred[a:b], mat, posix, grisk_normal)
             all_lambdas[a:b] = lambdas
             all_deltas[a:b] = deltas
+            posix += 1
 
         tree = sklearn.tree.DecisionTreeRegressor(
             criterion='friedman_mse',

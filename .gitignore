@@ -21,3 +21,5 @@ local/
 # Installation Files #
 ######################
 files.txt
+dataset/
+venv/
