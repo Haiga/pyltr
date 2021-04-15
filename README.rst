@@ -16,6 +16,9 @@ This software is licensed under the BSD 3-clause license (see ``LICENSE.txt``).
 The author may be contacted at ``ma127jerry <@t> gmail`` with general
 feedback, questions, or bug reports.
 
+This Fork
+=========
+This fork implements the methodology proposed in Risk-Sensitive Evaluation and Learning to Rank using Multiple Baselines
 
 Example
 =======
