@@ -22,10 +22,10 @@ if __name__ == "__main__":
         metric=metric,
         # n_estimators=1000,
         n_estimators=ntrees,
-        learning_rate=0.05,
+        learning_rate=0.01,
         max_features=0.1,
         query_subsample=0.1,
-        max_leaf_nodes=5,
+        max_leaf_nodes=10,
         min_samples_leaf=150,
         verbose=1,
         features_risk=features
