@@ -21,7 +21,7 @@ if __name__ == "__main__":
     model = pyltr.models.LambdaMART(
         metric=metric,
         # n_estimators=1000,
-        n_estimators=ntrees,
+        n_estimators=15,
         learning_rate=0.01,
         max_features=0.1,
         query_subsample=0.1,
